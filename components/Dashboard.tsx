@@ -32,7 +32,10 @@ const Dashboard: React.FC = () => {
   }, [customers, suppliers, sales, purchases, vouchers, expenses]);
 
   const currentSummary = useMemo(() => {
-    return budgetSummary.find(s => s.currency === activeCurrency) || { assets: 0, liabilities: 0, cash: 0, net: 0, currency: activeCurrency };
+    return budgetSummary.find(s => s.currency === activeCurrency) || { 
+      assets: 0, liabilities: 0, cash: 0, net: 0, currency: activeCurrency,
+      customerDebts: 0, supplierDebts: 0, customerCredits: 0, supplierCredits: 0
+    };
   }, [budgetSummary, activeCurrency]);
 
   const mainServices = useMemo(() => [
@@ -133,18 +136,20 @@ const Dashboard: React.FC = () => {
             
             <div className="flex flex-row lg:flex-col gap-6 lg:gap-10 border-t lg:border-t-0 lg:border-r border-slate-100 dark:border-white/5 pt-6 lg:pt-0 lg:pr-16 w-full lg:w-auto">
               <div className="flex-1 lg:text-right">
-                <p className="text-[8px] lg:text-sm font-black text-slate-400 uppercase mb-1 tracking-widest">ديون العملاء (لنا)</p>
+                <p className="text-[8px] lg:text-sm font-black text-slate-400 uppercase mb-1 tracking-widest">إجمالي الأصول (ما لنا)</p>
                 <p className="text-xl lg:text-5xl font-black text-emerald-500 tabular-nums">+{formatAmount(currentSummary.assets)}</p>
+                <p className="text-[7px] lg:text-[10px] opacity-40 font-bold mt-1">تشمل ديون العملاء والفائض للموردين</p>
               </div>
               <div className="flex-1 lg:text-right border-r lg:border-r-0 lg:border-t border-slate-100 dark:border-white/5 pr-6 lg:pr-0 lg:pt-10">
-                <p className="text-[8px] lg:text-sm font-black text-slate-400 uppercase mb-1 tracking-widest">ديون الموردين (علينا)</p>
+                <p className="text-[8px] lg:text-sm font-black text-slate-400 uppercase mb-1 tracking-widest">إجمالي الخصوم (ديون علينا)</p>
                 <p className="text-xl lg:text-5xl font-black text-rose-500 tabular-nums">-{formatAmount(currentSummary.liabilities)}</p>
+                <p className="text-[7px] lg:text-[10px] opacity-40 font-bold mt-1">تشمل ديون الموردين ومبالغ العملاء الفائضة</p>
               </div>
             </div>
           </div>
           
           <div className="mt-8 pt-6 border-t border-slate-100 dark:border-white/5 flex justify-between items-center">
-             <span className="text-[10px] lg:text-base font-black text-slate-400 opacity-60">صافي القيمة التقديرية (سيولة + ديون):</span>
+             <span className="text-[10px] lg:text-base font-black text-slate-400 opacity-60">صافي القيمة التقديرية (سيولة + أصول - خصوم):</span>
              <span className={`text-lg lg:text-3xl font-black tabular-nums ${currentSummary.net >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                 {formatAmount(currentSummary.net)} {activeCurrency}
              </span>

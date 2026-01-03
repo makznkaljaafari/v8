@@ -1,6 +1,18 @@
 
 import { Sale, Purchase, Voucher, Customer, Supplier, Expense } from "../types";
 
+export interface BudgetBreakdown {
+  currency: string;
+  customerDebts: number;    // ديون العملاء لنا (أصل)
+  supplierCredits: number;  // دفعاتنا الزائدة للموردين (أصل)
+  supplierDebts: number;    // ديون الموردين علينا (خصم)
+  customerCredits: number;  // دفعات العملاء الزائدة لنا (خصم)
+  assets: number;           // إجمالي الأصول
+  liabilities: number;      // إجمالي الخصوم
+  cash: number;             // السيولة في الصندوق
+  net: number;              // صافي القيمة
+}
+
 export const financeService = {
   /**
    * حساب مديونية عميل محدد بكافة العملات
@@ -24,6 +36,8 @@ export const financeService = {
         return sum;
       }, 0);
 
+      // إذا كان الناتج موجباً: العميل مدين لنا
+      // إذا كان الناتج سالباً: نحن مدينون للعميل (دفع زيادة)
       return { currency: cur, amount: totalSalesDebt - totalReceipts };
     });
   },
@@ -50,55 +64,64 @@ export const financeService = {
         return sum;
       }, 0);
 
+      // إذا كان الناتج موجباً: نحن مدينون للمورد
+      // إذا كان الناتج سالباً: المورد مدين لنا (دفعنا زيادة)
       return { currency: cur, amount: totalPurchases - totalPayments };
     });
   },
 
   /**
-   * حساب ملخص الميزانية العامة (أصول، خصوم، وصندوق)
-   * تم تحسين الحساب ليشمل كافة العمليات النقدية والسندات
+   * حساب ملخص الميزانية العامة مع تفاصيل دقيقة للديون
    */
-  getGlobalBudgetSummary(customers: Customer[], suppliers: Supplier[], sales: Sale[], purchases: Purchase[], vouchers: Voucher[], expenses: Expense[] = []) {
+  getGlobalBudgetSummary(customers: Customer[], suppliers: Supplier[], sales: Sale[], purchases: Purchase[], vouchers: Voucher[], expenses: Expense[] = []): BudgetBreakdown[] {
     const currencies = ['YER', 'SAR', 'OMR'] as const;
     return currencies.map(cur => {
-      let totalAssets = 0;      // ديون العملاء (لنا)
-      let totalLiabilities = 0; // ديون الموردين (علينا)
-      let cashInSafe = 0;       // رصيد الصندوق (السيولة المتوفرة)
+      let customerDebts = 0;
+      let supplierCredits = 0;
+      let supplierDebts = 0;
+      let customerCredits = 0;
+      let cashInSafe = 0;
 
-      // 1. حساب إجمالي الديون المستحقة لنا عند العملاء
+      // 1. حساب أرصدة العملاء
       for (const c of customers) {
         const bal = this.getCustomerBalances(c.id, sales, vouchers).find(b => b.currency === cur);
-        if (bal && bal.amount > 0) totalAssets += bal.amount;
+        if (bal) {
+          if (bal.amount > 0) customerDebts += bal.amount;
+          else if (bal.amount < 0) customerCredits += Math.abs(bal.amount);
+        }
       }
 
-      // 2. حساب إجمالي الديون المستحقة علينا للموردين
+      // 2. حساب أرصدة الموردين
       for (const s of suppliers) {
         const bal = this.getSupplierBalances(s.id, purchases, vouchers).find(b => b.currency === cur);
-        if (bal && bal.amount > 0) totalLiabilities += bal.amount;
+        if (bal) {
+          if (bal.amount > 0) supplierDebts += bal.amount;
+          else if (bal.amount < 0) supplierCredits += Math.abs(bal.amount);
+        }
       }
 
-      // 3. حساب السيولة النقدية في الصندوق (الرصيد الفعلي الملموس)
-      // (+) مبيعات نقدي
+      // 3. حساب السيولة النقدية (الصندوق)
       const cashSales = sales.filter(s => s.status === 'نقدي' && s.currency === cur && !s.is_returned).reduce((sum, s) => sum + s.total, 0);
-      // (+) سندات قبض (من عملاء أو غيرهم)
       const voucherReceipts = vouchers.filter(v => v.type === 'قبض' && v.currency === cur).reduce((sum, v) => sum + v.amount, 0);
-      
-      // (-) مشتريات نقدي
       const cashPurchases = purchases.filter(p => p.status === 'نقدي' && p.currency === cur && !p.is_returned).reduce((sum, p) => sum + p.total, 0);
-      // (-) سندات دفع (لموردين أو غيرهم)
       const voucherPayments = vouchers.filter(v => v.type === 'دفع' && v.currency === cur).reduce((sum, v) => sum + v.amount, 0);
-      // (-) مصاريف عامة
       const totalExp = (expenses || []).filter(e => e.currency === cur).reduce((sum, e) => sum + e.amount, 0);
 
-      // المعادلة: (كل الداخل نقداً) - (كل الخارج نقداً)
       cashInSafe = (cashSales + voucherReceipts) - (cashPurchases + voucherPayments + totalExp);
+
+      const totalAssets = customerDebts + supplierCredits;
+      const totalLiabilities = supplierDebts + customerCredits;
 
       return {
         currency: cur,
+        customerDebts,
+        supplierCredits,
+        supplierDebts,
+        customerCredits,
         assets: totalAssets,
         liabilities: totalLiabilities,
         cash: cashInSafe,
-        net: cashInSafe + totalAssets - totalLiabilities // صافي المركز المالي
+        net: cashInSafe + totalAssets - totalLiabilities
       };
     });
   }

@@ -72,11 +72,22 @@ const AccountStatement: React.FC = () => {
     let text = `*📊 كشف حساب ${personType}: ${person.name}*\n*🏢 ${user?.agency_name || 'وكالة الشويع'}*\n*💰 العملة: ${selectedCurrency}*\n--------------------------------\n📅 التاريخ | البيان | الرصيد\n--------------------------------\n`;
     statementData.slice(0, 15).forEach(row => { text += `📅 ${new Date(row.date).toLocaleDateString('ar-YE')} | ${row.details} | *${row.balance.toLocaleString()}*\n`; });
     const finalBalance = statementData[0]?.balance || 0;
-    text += `--------------------------------\n*⚠️ الرصيد النهائي المستحق: ${finalBalance.toLocaleString()} ${selectedCurrency}*\n--------------------------------\n✅ تم التوليد آلياً من نظام الشويع الذكي`;
+    
+    let statusText = "";
+    if (personType === 'عميل') {
+      statusText = finalBalance > 0 ? `عليكم مديونية: ${finalBalance.toLocaleString()}` : finalBalance < 0 ? `لكم رصيد فائض عندنا: ${Math.abs(finalBalance).toLocaleString()}` : "الحساب مصفى";
+    } else {
+      statusText = finalBalance > 0 ? `علينا مديونية لكم: ${finalBalance.toLocaleString()}` : finalBalance < 0 ? `لدينا رصيد فائض عندكم: ${Math.abs(finalBalance).toLocaleString()}` : "الحساب مصفى";
+    }
+
+    text += `--------------------------------\n*⚠️ ${statusText} ${selectedCurrency}*\n--------------------------------\n✅ تم التوليد آلياً من نظام الشويع الذكي`;
     shareToWhatsApp(text, person.phone);
   };
 
   if (!person) return <PageLayout title="خطأ" onBack={() => navigate('dashboard')}><p>العميل/المورد غير موجود</p></PageLayout>;
+
+  const finalBalance = statementData[0]?.balance || 0;
+  const isCreditForCustomer = personType === 'عميل' && finalBalance < 0;
 
   return (
     <PageLayout 
@@ -92,18 +103,27 @@ const AccountStatement: React.FC = () => {
         
         {/* Top Section - Large Stats & Currency */}
         <div className="flex flex-col lg:flex-row gap-6 items-stretch">
-          <div className="flex-1 bg-gradient-to-br from-slate-900 to-slate-800 p-10 lg:p-14 rounded-[3rem] lg:rounded-[4rem] shadow-2xl border border-white/5 relative overflow-hidden group">
+          <div className={`flex-1 p-10 lg:p-14 rounded-[3rem] lg:rounded-[4rem] shadow-2xl border relative overflow-hidden group transition-all duration-500 ${
+            isCreditForCustomer ? 'bg-amber-900 border-amber-500/30' : 'bg-slate-900 border-white/5'
+          }`}>
              <div className="absolute top-0 right-0 w-64 h-64 bg-sky-500/10 rounded-full blur-[100px] -mr-20 -mt-20"></div>
              <div className="relative z-10 flex justify-between items-end">
                 <div className="text-right">
-                   <p className="text-[10px] lg:text-sm font-black text-slate-400 uppercase tracking-[0.3em] mb-4">إجمالي الرصيد المستحق ({selectedCurrency})</p>
+                   <p className="text-[10px] lg:text-sm font-black text-slate-400 uppercase tracking-[0.3em] mb-4">
+                     {isCreditForCustomer ? 'رصيد دائن (مبالغ للعميل عندنا)' : 'إجمالي الرصيد المستحق'} ({selectedCurrency})
+                   </p>
                    <h2 className={`text-5xl lg:text-[7rem] font-black tabular-nums tracking-tighter leading-none ${
-                     (statementData[0]?.balance || 0) > 0 ? 'text-rose-500' : 'text-emerald-500'
+                     isCreditForCustomer ? 'text-amber-400' : (finalBalance > 0 ? 'text-rose-500' : 'text-emerald-500')
                    }`}>
-                     {(statementData[0]?.balance || 0).toLocaleString()}
+                     {Math.abs(finalBalance).toLocaleString()}
                    </h2>
+                   {isCreditForCustomer && <p className="text-amber-400/60 font-black text-xs mt-4">هذا المبلغ يُعتبر ديناً على الوكالة لصالح العميل</p>}
                 </div>
-                <div className="w-20 h-20 lg:w-32 lg:h-32 bg-white/5 rounded-[2.5rem] flex items-center justify-center text-5xl lg:text-7xl shadow-inner border border-white/10 group-hover:rotate-12 transition-transform">📊</div>
+                <div className={`w-20 h-20 lg:w-32 lg:h-32 rounded-[2.5rem] flex items-center justify-center text-5xl lg:text-7xl shadow-inner border transition-all ${
+                  isCreditForCustomer ? 'bg-amber-600/20 border-amber-400/20' : 'bg-white/5 border-white/10'
+                }`}>
+                  {isCreditForCustomer ? '⚖️' : '📊'}
+                </div>
              </div>
           </div>
 
@@ -122,7 +142,7 @@ const AccountStatement: React.FC = () => {
           </div>
         </div>
 
-        {/* The Professional Statement Table */}
+        {/* Table */}
         <div className="bg-white dark:bg-slate-950 rounded-[3rem] shadow-3xl overflow-hidden border-2 border-slate-100 dark:border-slate-800">
            <div className="overflow-x-auto no-scrollbar">
               <table className="w-full text-right border-collapse">
@@ -152,8 +172,8 @@ const AccountStatement: React.FC = () => {
                           <td className={`p-8 lg:p-10 border-l border-slate-100 dark:border-slate-800 text-center font-black tabular-nums text-lg lg:text-3xl ${row.credit > 0 ? 'text-emerald-500 bg-emerald-50/20' : 'text-slate-300 dark:text-slate-800'}`}>
                              {row.credit > 0 ? row.credit.toLocaleString() : '-'}
                           </td>
-                          <td className={`p-8 lg:p-10 text-center font-black tabular-nums text-xl lg:text-4xl bg-slate-50 dark:bg-slate-800/40 ${row.balance > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                             {row.balance.toLocaleString()}
+                          <td className={`p-8 lg:p-10 text-center font-black tabular-nums text-xl lg:text-4xl bg-slate-50 dark:bg-slate-800/40 ${row.balance > 0 ? 'text-rose-600' : (row.balance < 0 ? 'text-amber-600' : 'text-emerald-600')}`}>
+                             {Math.abs(row.balance).toLocaleString()}
                           </td>
                        </tr>
                     ))}
@@ -162,17 +182,6 @@ const AccountStatement: React.FC = () => {
                     )}
                  </tbody>
               </table>
-           </div>
-        </div>
-
-        {/* Footer info banner */}
-        <div className="bg-sky-50 dark:bg-sky-900/10 p-8 lg:p-12 rounded-[3rem] border-2 border-dashed border-sky-100 dark:border-sky-800/30 flex flex-col lg:flex-row items-center gap-10">
-           <div className="w-20 h-20 bg-sky-600 text-white rounded-3xl flex items-center justify-center text-4xl shadow-2xl animate-pulse">💡</div>
-           <div className="text-right flex-1">
-             <h4 className="text-lg lg:text-2xl font-black text-sky-900 dark:text-sky-300 mb-2">توضيح محاسبي ذكي</h4>
-             <p className="text-sm lg:text-lg font-bold text-sky-800/60 dark:text-sky-400/60 leading-relaxed">
-               تم حساب هذا الكشف تلقائياً بمقاصة كافة المبيعات والسندات. المبالغ باللون <span className="text-rose-600">الأحمر</span> تعني مبالغ مستحقة (عليكم)، والمبالغ <span className="text-emerald-600">بالأخضر</span> تعني دفعات مستلمة.
-             </p>
            </div>
         </div>
 
